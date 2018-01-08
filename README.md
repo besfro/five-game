@@ -10,6 +10,16 @@ next
 * 实现AI对战
 * 算法优化
 
+
+Requirements
+------------
+
+* Bash(git、ssh)
+* LNMP/LAMP(php5.4+)
+* Composer
+* Ansible(Optional)
+
+
 change log
 ------------
 

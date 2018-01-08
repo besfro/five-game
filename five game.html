@@ -280,7 +280,6 @@
         //落子方法
         downChess(x, y) {
             const curRole = this.role === 1 ? 2 : 1
-            console.log('要下y:'+y+'x'+x)
             //有没有落子
             if(!this.chessArr[y][x][0] || this.winner) {
                 //清除悔棋记录
@@ -338,7 +337,6 @@
             const historyInd = this.historyInd
             //获取当前棋子权重
             const chessWeight = this.chessWeight(x, y, role)
-            //console.log(chessWeight)
             if(this.checkedWin(chessWeight)) {
                 this.winner = role
                 setTimeout(()=>alert(`${this.winner === 1 ? '白' : '黑'}方获胜`), 20)
@@ -395,7 +393,6 @@
             //从缓存取
             const [cache, search] = [this.findChess.cache, `${x}${y}${cnt}${isEmpty}${self}${type}`]
             if(cache[search]) {
-                console.log('from cache')
                 return cache[search]
             }
 
@@ -512,11 +509,9 @@
                     chessRole = item.role
                     //查找已落子附近空落点
                     chessArr = this.findChess(x, y, 1, true, false, 2)
-                    console.log(x, y, chessArr)
                     for(let [ind, item] of chessArr.entries()) {
                         for(let [subInd, subItem] of item.arr.entries()) {
                             let weight = this.chessWeight(subItem[1], subItem[0], chessRole)
-                            //console.log(`x:${subItem[1]}y:${subItem[0]}权重:${weight}`)
                             let obj = {
                                 weight: weight,
                                 x: subItem[1], 

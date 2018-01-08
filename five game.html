@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -77,18 +77,21 @@
 </head>
 <body>
     <div class="app">
-        <div id="game"></div>
-        <!-- <canvas id="game" width="600" height="600"></canvas> -->
+        <!-- <div id="game"></div> -->
+        <canvas id="game" width="600" height="600"></canvas>
         <div class="tools">
             <span id="reset">重置</span>
             <span id="chess-back">悔棋</span>
             <span id="cancel-chess-back">撤销悔棋</span>
+            <span id="human-vs-ai">人机对战</span>
+            <span id="ai-vs-ai">AI对战</span>
         </div>
     </div>
     <script>
 
     class Game {
         constructor(options) {
+            //配置项
             this.options = Object.assign({
                 id: '#game',
                 type: 'canvas',
@@ -97,81 +100,26 @@
                 background: 'rgb(238, 190, 110)'
             }, options, {grid: 16})
             
+            //游戏元素
             this.el = document.querySelector(this.options.id)
+            //生成权重规则
+            this.createWeightRule()
+            //连线规则
+            this.chessRule = [
+                ['[y, x-num]', '[y, x+num]'],            //x轴
+                ['[y-num, x]', '[y+num, x]'],            //y轴
+                ['[y-num, x-num]', '[y+num, x+num]'],    //左斜线
+                ['[y+num, x-num]', '[y-num, x+num]']     //右斜线
+            ] 
 
-            //类型 1-dom 2-canvas
-            this.type = (this.options.type === 'canvas' && this.el.tagName === 'CANVAS') ? 2 : 1
-            this.isDom = this.type === 1
-            this.ctx = this.type === 2 ? this.el.getContext('2d') : null 
-
-            //AI权重规则 o-棋子  _ -空位
-            this.firWeight = 100
-            this.secWeight = 60
-            this.weight = {
-                'ooooo': this.firWeight,
-                '_oooo_': this.secWeight,
-                '_ooo_': 6,
-                '_oo__': 5,
-                '__oo_': 5,
-                'oooo_': 4,
-                '_oooo': 4,
-                '__ooo': 3,
-                'ooo__': 3,
-                'oo___': 2,
-                '___oo': 2,
-                '____o': 1,
-                'o____': 1
-            }
-
-            //外部使用
+            //外部使用方法
             this.reset = this.reset.bind(this)
             this.chessBack = this.chessBack.bind(this)
             this.cancelChessBack = this.cancelChessBack.bind(this)
+            this.humanVsAi = this.humanVsAi.bind(this)
+            this.aiVsAi = this.aiVsAi.bind(this)
+            //初始化
             this.init()
-        }
-        //初始化
-        init() {
-            //网格大小
-            this.gridWdith = (this.options.width - this.options.padding * 2)/this.options.grid
-            //棋子大小
-            this.chessWdith = this.gridWdith/2
-            //刻画棋盘
-            this.drawBorad()
-            this.board = this.el.children[0]
-            this.chessmans = this.el.children[1]
-            //重置
-            this.reset()
-            //初始化事件
-            this.el.addEventListener('click', (event)=>this.downChessListener(event))
-        }
-        //重置
-        reset() {
-            const defChess = this.options.grid / 2
-            //AI设置 
-            this.ai = {
-                //开启AI
-                open: false, 
-                //1-人vs机 2-机vs机
-                type: 1,     
-                //AI角色默认是黑
-                role: 2,      
-                //默认位置
-                defChess: [defChess, defChess]
-            }
-            //当前已落子角色 1-白 2-黑
-            this.role = 2
-            //锁住棋盘
-            this.locker = false
-            //获胜方 
-            this.winner = ''
-            //当前落子步数
-            this.downCnt = 0
-            //落子记录
-            this.history = []
-            //落子记录索引
-            this.historyInd = []
-            //清空落子
-            this.isDom ? this.chessmans.innerHTML = '' : this.ctx.putImageData(this.ctxImageData, 0, 0)
         }
         set downCnt(n) {
             //修改步数
@@ -183,6 +131,105 @@
         }
         get downCnt() {
             return this._downCnt
+        }
+        //初始化
+        init() {
+            const [{width, padding, grid, type}, el] = [this.options, this.el]
+
+            //类型 1-DOM 2-CANVAS
+            this.type = type === 'canvas' && el.tagName === 'CANVAS' ? 2 : 1
+            //是否DOM类型
+            this.isDom = this.type === 1
+            //canvas 保存ctx
+            this.ctx = this.type === 2 ? this.el.getContext('2d') : null 
+            //棋盘中心
+            this.boardCenter = grid / 2
+            //网格大小
+            this.gridWdith = (width - padding * 2) / grid
+            //棋子大小
+            this.chessWdith = this.gridWdith / 2
+            //刻画棋盘
+            this.drawBorad()
+            //棋盘元素
+            this.board = el.children[0]
+            //棋子盒子
+            this.chessmans = el.children[1]
+            //重置
+            this.reset()
+            //初始化事件
+            el.addEventListener('click', (event) => this.downChessListener(event))
+        }
+        //重置
+        reset() {
+            const [grid, boardCenter] = [this.options.grid, this.boardCenter]
+            //AI设置 
+            this.ai = {
+                //开启AI
+                open: false, 
+                //1-人vs机 2-机vs机
+                type: 1,     
+                //AI角色默认是黑
+                role: 2,      
+                //默认位置
+                defChess: [boardCenter, boardCenter]
+            }
+            //当前已落子角色 1-白 2-黑
+            this.role = 2
+            //锁住棋盘
+            this.locker = false
+            //获胜方 
+            this.winner = ''
+            //当前落子步数
+            this.downCnt = 0
+            //最大落子数
+            this.maxDownCnt = Math.pow(grid + 1, 2)
+            //落子记录 保存所有落子的数据
+            this.history = []
+            //清空落子
+            this.isDom ? this.chessmans.innerHTML = '' : this.ctx.putImageData(this.ctxImageData, 0, 0)
+            //清除查询器缓存
+            this.findChess.cache = {}
+            //生成棋盘数组 
+            this.createChessArr()
+        }
+        //棋盘数组 用于表现落子情况 0-是空 1-白棋 2-黑棋 
+        createChessArr() {
+            const [chessArr, grid] = [[], this.options.grid]
+            for(let i = 0, len = grid + 1; i < len; i++) {
+                for(let n = 0, subLen = grid + 1; n < subLen; n++) {
+                    !chessArr[i] && (chessArr[i] = [])
+                    chessArr[i][n] = [0]
+                }
+            }
+            this.chessArr = chessArr
+        }
+        //生成权重规则 用于计算落子位的权限
+        createWeightRule() {
+            //权限规则 1-白棋 2-黑棋
+            const arr = [
+                {rule: '11111', weight: 100},
+                {rule: '011110', weight: 40},
+                {rule: '01110', weight: 6},
+                {rule: '11110', weight: 5},
+                {rule: '01111', weight: 5},
+                {rule: '01100', weight: 5},
+                {rule: '00110', weight: 5},
+                {rule: '00111', weight: 3},
+                {rule: '11100', weight: 3},
+                {rule: '11000', weight: 2},
+                {rule: '00011', weight: 2},
+                {rule: '00001', weight: 1},
+                {rule: '10000', weight: 1}
+            ]
+            const rules = {
+                1: arr,
+                2: []
+            }
+            for(let i = 0, len = arr.length; i < len; i++) {
+                let item = arr[i]
+                rules[2].push({rule: item.rule.replace(/1/g, 2), weight: item.weight})
+            }
+            this.rules = rules
         }
         //刻画棋盘
         drawBorad() {
@@ -218,8 +265,8 @@
                 })
                 this.ctxImageData = ctx.getImageData(0, 0, width, width)
             }
-            
         }
+        //监听落子事件
         downChessListener(event) {
             if((event.target.className || '').indexOf('chess-item') !== -1 || this.locker) return
             const [gridWdith, options] = [this.gridWdith, this.options]
@@ -233,15 +280,11 @@
         //落子方法
         downChess(x, y) {
             const curRole = this.role === 1 ? 2 : 1
-            const chessId = `chess-x${x}-y${y}`
-            //没有落子
-            const chessIndBlack = this.historyInd.indexOf(chessId)
-            const chessIndWhite = this.historyInd.indexOf(chessId)
-            if(this.winner) return
-            if((chessIndBlack === -1 && chessIndWhite === -1) || chessIndBlack + 1 > this.downCnt || chessIndWhite + 1 > this.downCnt) {
+            console.log('要下y:'+y+'x'+x)
+            //有没有落子
+            if(!this.chessArr[y][x][0] || this.winner) {
                 //清除悔棋记录
                 this.history.length = this.downCnt
-                this.historyInd.length = this.downCnt
                 this.history.push({
                     x: x,
                     y: y,
@@ -249,7 +292,10 @@
                     //画棋子
                     el: this.drawDownChess(x, y, curRole)
                 })
-                this.historyInd.push(chessId)
+                //更新棋盘数组
+                this.chessArr[y][x][0] = curRole
+                //预存空落位
+                this.preFindChess(x, y)
                 //步数
                 this.downCnt++
                 //换角色
@@ -292,113 +338,214 @@
             const historyInd = this.historyInd
             //获取当前棋子权重
             const chessWeight = this.chessWeight(x, y, role)
-            for(let item of chessWeight.valueOf()) {
-                if(item >= this.firWeight) {
-                    this.winner = role
-                    setTimeout(()=>alert(`${this.winner === 1 ? '白' : '黑'}方获胜`))
-                    break        
-                }  
+            //console.log(chessWeight)
+            if(this.checkedWin(chessWeight)) {
+                this.winner = role
+                setTimeout(()=>alert(`${this.winner === 1 ? '白' : '黑'}方获胜`), 20)
+            } else if(this.downCnt === this.maxDownCnt) {
+                setTimeout(()=>alert('恭喜平局！'), 20)
             }
+        }
+        checkedWin(weight) {
+            return weight >= 100
         }
         //悔棋
         chessBack() {
             if(this.downCnt === 0) return
+            //步数减
+            this.downCnt--
+            //
+            const {ctx, history, downCnt} = this
+            //要撤回的落子数据
+            const {x, y, el} = history[downCnt]
             //清除胜方
             this.winner = null
-            //步数减2
-            this.downCnt--
             //角色切换
             this.nextRole()
+            //更新落子数组
+            this.chessArr[y][x][0] = 0
             //删除落子
-            this.isDom ? this.chessmans.removeChild(this.history[this.downCnt]['el']) : this.ctx.putImageData(this.history[this.downCnt - 1]['el'], 0, 0)
+            this.isDom 
+                ? this.chessmans.removeChild(el) 
+                : ctx.putImageData(history[downCnt - 1]['el'], 0, 0)
         }
         //撤销悔棋
         cancelChessBack() {
-            const history = this.history[this.downCnt]
+            const history = this.history[this.downCnt] || {}
+            const {x, y, role, el} = history
             if(history) {
-                //还原棋子
-                this.isDom ? this.chessmans.appendChild(history.el) : this.ctx.putImageData(history.el, 0, 0) 
                 //加步数
                 this.downCnt++
                 //切换角色
                 this.nextRole()
+                //更新落子数组
+                this.chessArr[y][x][0] = role
+                //还原棋子
+                this.isDom ? this.chessmans.appendChild(el) : this.ctx.putImageData(el, 0, 0) 
                 //判断
-                this.judge(history.x, history.y, history.role)
+                this.judge(x, y, role)
             }
         }
         //切换角色
         nextRole() {
             this.role = this.role === 1 ? 2 : 1
         }
-        //返回棋子连线ID self 返回的数据是否包含本身
-        findChess(x, y, role, cnt = 1, self = true) {
-            const rule = (() => {
-                const ruleArr = []
-                const create = (rule) => {
-                    let num = 1
-                    return () => {
-                        return eval.call(null, `(num, x, y, c) => {
-                            return 'chess-' + ${rule}
-                        }`)(num++, x, y, role)
+        //返回棋子的连线棋子 self-是否返回本身 empty - 返回的棋子是否为空位 type 1-返回棋子的引用 2-棋子坐标
+        findChess(x, y, cnt = 1, isEmpty = false, self = true, type = 1) {
+            //从缓存取
+            const [cache, search] = [this.findChess.cache, `${x}${y}${cnt}${isEmpty}${self}${type}`]
+            if(cache[search]) {
+                console.log('from cache')
+                return cache[search]
+            }
+
+            const grid = this.options.grid
+            const chessArr = this.chessArr
+            const results = []
+            //生成方法
+            const create = function(ruleStr, num) {
+                return (() => {
+                    const [py, px] = eval.call(null, `(x, y, num)=>${ruleStr}`)(x, y, num)
+
+                    if(py < 0 || px < 0 || py > grid || px > grid) {
+                        return ''
                     }
-                }
-                [
-                    ['`x${x-num}-y${y}`', '`x${x+num}-y${y}`'],           //x轴
-                    ['`x${x}-y${y-num}`', '`x${x}-y${y+num}`'],           //y轴
-                    ['`x${x-num}-y${y-num}`', '`x${x+num}-y${y+num}`'],   //左斜线
-                    ['`x${x-num}-y${y+num}`', '`x${x+num}-y${y-num}`']    //右斜线
-                ].forEach(item => {
-                    ruleArr.push({
-                        left: create(item[0]),
-                        right: create(item[1]),
-                        cnt: 1
+
+                    const chess = (chessArr[py] || [])[px] || ''
+                    const chessPlace = [py, px]
+                    const resutls = type === 1 ? chess : chessPlace
+                    //是否只返回空落子位
+                    return isEmpty ? (!chess[0] ? resutls : null) : resutls
+                })()
+            }
+            
+            //生成连线棋子坐标
+            var returnItem = JSON.stringify({arr: [], ind: 0, yx: []})
+            for(let i = 1, len = cnt + 1; i < len; i++) {
+                this.chessRule.forEach((item, ind) => {
+                    if(!results[ind]) {
+                        results[ind] = JSON.parse(returnItem)
+                        self && results[ind]['arr'].push(type === 1 ? chessArr[y][x] : [y, x])
+                        results[ind]['yx'].push([y, x])
+                    }
+                    const left = create(item[0], i), right = create(item[1], i)
+                    if(left) {
+                        results[ind]['ind'] += 1 
+                        results[ind]['arr'].splice(0, 0, left)
+                    }
+                    right && results[ind]['arr'].push(right)
+                })
+            }
+            //不缓只查询空坐标
+            if(!isEmpty) { cache[search] = results }
+            
+            return results
+        }
+        preFindChess(x, y) {
+            //附近空落位坐标
+            const empty = this.findChess(x, y, 1, true, false, 2) || []
+            //查找连线落位
+            setTimeout(() => {
+                empty.forEach(item => {
+                    item.arr.forEach(subItem => {
+                        this.findChess(subItem[0], subItem[1], 5, false)
                     })
                 })
-                return ruleArr
-            })()
-
-            const result = [], chessName = `chess-x${x}-y${y}`
-            Array.from({length: cnt}).forEach(() => {
-                rule.forEach((item, index) => {
-                    !result[index] && (result[index] = self ? [chessName] : []) 
-                    result[index] = [item.left(), ...result[index], item.right()]
-                })
-            })
-            return result
+            }, 20)
         }
-        //计算棋子权重
-        chessWeight(_x, _y, _role) {
-            const weight = this.weight
-            const [x, y, role] = [_x|0, _y|0, _role|0]
-            const [chessArr, chessWeight] = [this.findChess(x, y, role, 4), []]
-            const [downCnt, history, historyInd] = [this.downCnt, this.history, this.historyInd]
-            const curChessId = `chess-x${x}-y${y}`
-            //计算权重
-            
-            for(let [ind, item] of chessArr.entries()) {
-                for(let [subInd, subItem] of item.entries()) {
-                    const indexOf = historyInd.indexOf(subItem)
-                    if(curChessId === subItem) {
-                        item.splice(subInd, 1, 'o')
-                    } else if(indexOf === -1) {
-                        item.splice(subInd, 1, '_')
-                    } else {
-                        let chessData = history[indexOf], itemChess = chessData.role === role ? 'o' : 'x'
-                        item.splice(subInd, 1, itemChess)  
-                    }
-                }
-                //权重
-                var itemWeight = 0;
-                for(let key in weight) {
-                    let execArr = new RegExp(key).exec(item.join('')) || []
+        //计算棋子权重 
+        chessWeight(x, y, role) {
+            const rules = this.rules[role]
+            const findChessArr = this.findChess(x, y, 5, false)
+            var weight = 0
+            for(let [ind, item] of findChessArr.entries()) {
+                for(let [ruleInd, ruleItem] of rules.entries()) {
+                    let newItem = item.arr.join('').split('')
+                    newItem[item.ind] = role
+                    const execArr = new RegExp(ruleItem.rule).exec(newItem.join('')) || []
                     if(execArr[0]) {
-                        itemWeight = weight[key] || 0
+                        weight += ruleItem.weight;
                         break
                     }
                 }
-                chessWeight.push(itemWeight)
             }
-            return chessWeight
+            return weight
+        }
+        //人机
+        humanVsAi() {
+            this.reset()
+            this.ai.open = true
+            this.ai.type = 1
+        }
+        //机机
+        aiVsAi() {
+            this.reset()
+            this.locker = true
+            this.ai.open = true
+            this.ai.type = 2
+            this.aiCore()
+        }
+        //AI算法
+        aiCore() {
+            //ai的配置
+            const {open, type, role: aiRole, defChess} = this.ai
+            const {history, historyInd, downCnt, role} = this
+            //当前落子方
+            const curRole = role === 1 ? 2 : 1
+            //落子方空白点   
+            var myPlace = [{weight: 0, x: defChess[0], y: defChess[1]}]
+            var myMaxWeight = 0
+            //反方空白点
+            var otherPlace = {weight: 0}
+
+            //未开启
+            if(!open || this.winner) return
+            //人机或机机
+            if(type === 1 && aiRole !== role || type === 2) {
+                this.locker = true
+                let x, y, chessArr, chessRole
+                //循环落子记录
+                for(let [index, item] of history.entries()) {
+                    if(index + 1 > downCnt) break
+                    x = item.x 
+                    y = item.y
+                    chessRole = item.role
+                    //查找已落子附近空落点
+                    chessArr = this.findChess(x, y, 1, true, false, 2)
+                    console.log(x, y, chessArr)
+                    for(let [ind, item] of chessArr.entries()) {
+                        for(let [subInd, subItem] of item.arr.entries()) {
+                            let weight = this.chessWeight(subItem[1], subItem[0], chessRole)
+                            //console.log(`x:${subItem[1]}y:${subItem[0]}权重:${weight}`)
+                            let obj = {
+                                weight: weight,
+                                x: subItem[1], 
+                                y: subItem[0]
+                            }
+                            if(chessRole === curRole) {
+                                if(myMaxWeight < weight) {
+                                    myPlace = [obj]
+                                    myMaxWeight = weight
+                                } else if(myMaxWeight === weight) {
+                                    myPlace.push(obj)
+                                }
+                            } else {
+                                if(otherPlace.weight < weight) {
+                                    otherPlace = obj
+                                }
+                            }
+                        }
+                    }
+                }
+                if(this.checkedWin(myMaxWeight) || myMaxWeight >= otherPlace.weight) {
+                    let arr = myPlace[Math.round(Math.random() * (myPlace.length-1))]
+                    this.downChess(arr.x, arr.y)
+                } else {
+                    this.downChess(otherPlace.x, otherPlace.y)
+                }
+
+                this.locker = false
+            }
         }
     }
 
@@ -408,7 +555,7 @@
         //棋盘大小
         width: 600,
         //类型 dom/canvas
-        type: 'dom',
+        type: 'canvas',
         //棋盘边距
         padding: 20,
         //棋盘颜色
@@ -419,6 +566,8 @@
     document.querySelector('#reset').addEventListener('click', fiveGame.reset)
     document.querySelector('#chess-back').addEventListener('click', fiveGame.chessBack)
     document.querySelector('#cancel-chess-back').addEventListener('click', fiveGame.cancelChessBack)
+    document.querySelector('#human-vs-ai').addEventListener('click', fiveGame.humanVsAi)
+    document.querySelector('#ai-vs-ai').addEventListener('click', fiveGame.aiVsAi)
 
     </script>
 </body>

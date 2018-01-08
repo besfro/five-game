@@ -1,0 +1,425 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes">
+    <title>chess</title>
+    <style>
+        .app {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            flex-flow: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .flex {
+            display: flex;
+            flex-flow:  row wrap;
+        }
+        #game {
+            width: 600px;
+            height: 600px;
+            position: relative;
+            background: rgb(238, 190, 110);
+            box-shadow: 0px 0px 6px #666;
+            box-sizing: border-box;
+            border: 10px;
+        }
+        .board {
+            border-left: 1px solid #333;
+            border-top: 1px solid #333;
+            position: relative;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .board .grid {
+            min-width:  calc(100% / 16);
+            min-height:  calc(100% / 16);
+            border-right: 1px solid #333;
+            border-bottom: 1px solid #333;
+            box-sizing: border-box;
+        }
+        .chessmans {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 1
+        }
+        .chessmans span {
+            position: absolute;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .chessmans span.black {
+            background: #000
+        }
+        .chessmans span.white {
+            background: #fff
+        }
+        .tools {
+            margin-top: 20px;
+        }
+        .tools span {
+            display: inline-block;
+            padding: 6px 10px;
+            background: #ddd;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div id="game"></div>
+        <!-- <canvas id="game" width="600" height="600"></canvas> -->
+        <div class="tools">
+            <span id="reset">重置</span>
+            <span id="chess-back">悔棋</span>
+            <span id="cancel-chess-back">撤销悔棋</span>
+        </div>
+    </div>
+    <script>
+
+    class Game {
+        constructor(options) {
+            this.options = Object.assign({
+                id: '#game',
+                type: 'canvas',
+                width: 600,
+                padding: 20,
+                background: 'rgb(238, 190, 110)'
+            }, options, {grid: 16})
+            
+            this.el = document.querySelector(this.options.id)
+
+            //类型 1-dom 2-canvas
+            this.type = (this.options.type === 'canvas' && this.el.tagName === 'CANVAS') ? 2 : 1
+            this.isDom = this.type === 1
+            this.ctx = this.type === 2 ? this.el.getContext('2d') : null 
+
+            //AI权重规则 o-棋子  _ -空位
+            this.firWeight = 100
+            this.secWeight = 60
+            this.weight = {
+                'ooooo': this.firWeight,
+                '_oooo_': this.secWeight,
+                '_ooo_': 6,
+                '_oo__': 5,
+                '__oo_': 5,
+                'oooo_': 4,
+                '_oooo': 4,
+                '__ooo': 3,
+                'ooo__': 3,
+                'oo___': 2,
+                '___oo': 2,
+                '____o': 1,
+                'o____': 1
+            }
+
+            //外部使用
+            this.reset = this.reset.bind(this)
+            this.chessBack = this.chessBack.bind(this)
+            this.cancelChessBack = this.cancelChessBack.bind(this)
+            this.init()
+        }
+        //初始化
+        init() {
+            //网格大小
+            this.gridWdith = (this.options.width - this.options.padding * 2)/this.options.grid
+            //棋子大小
+            this.chessWdith = this.gridWdith/2
+            //刻画棋盘
+            this.drawBorad()
+            this.board = this.el.children[0]
+            this.chessmans = this.el.children[1]
+            //重置
+            this.reset()
+            //初始化事件
+            this.el.addEventListener('click', (event)=>this.downChessListener(event))
+        }
+        //重置
+        reset() {
+            const defChess = this.options.grid / 2
+            //AI设置 
+            this.ai = {
+                //开启AI
+                open: false, 
+                //1-人vs机 2-机vs机
+                type: 1,     
+                //AI角色默认是黑
+                role: 2,      
+                //默认位置
+                defChess: [defChess, defChess]
+            }
+            //当前已落子角色 1-白 2-黑
+            this.role = 2
+            //锁住棋盘
+            this.locker = false
+            //获胜方 
+            this.winner = ''
+            //当前落子步数
+            this.downCnt = 0
+            //落子记录
+            this.history = []
+            //落子记录索引
+            this.historyInd = []
+            //清空落子
+            this.isDom ? this.chessmans.innerHTML = '' : this.ctx.putImageData(this.ctxImageData, 0, 0)
+        }
+        set downCnt(n) {
+            //修改步数
+            this._downCnt = n
+            //触发AI事件
+            n !== 0 && setTimeout(() => {
+                this.aiCore()
+            }, 500)
+        }
+        get downCnt() {
+            return this._downCnt
+        }
+        //刻画棋盘
+        drawBorad() {
+            const [{el, isDom, ctx, gridWdith}, {grid, width, padding, background}] = [this, this.options]
+            //dom
+            if(isDom) {
+                const gridHTML = Array.from({length: grid * grid}, () => '<span class="grid"></span>').join('')
+                el.style.cssText = `width: ${width}px; height: ${width}px; padding: ${padding}px; background: ${background}`
+                el.innerHTML = `
+                    <div class="board flex">${gridHTML}</div>
+                    <div class="chessmans"></div>
+                `
+            //canvas
+            } else {
+                let right = width - padding, bottom = width - padding, verLineY = padding, horLineX = padding 
+                //填色
+                ctx.fillStyle = background
+                ctx.fillRect(0, 0, 600, 600)
+                ctx.lineWidth = 1
+                Array.from({length: grid + 1}).forEach(() => {
+                    ctx.beginPath()
+                    ctx.translate(0.5, 0)
+                    ctx.moveTo(horLineX, padding)
+                    ctx.lineTo(horLineX, bottom)
+                    ctx.translate(-0.5, 0)
+                    ctx.translate(0, 0.5)
+                    ctx.moveTo(padding, verLineY)
+                    ctx.lineTo(right, verLineY)
+                    ctx.translate(0, -0.5)
+                    ctx.stroke()
+                    horLineX += gridWdith
+                    verLineY += gridWdith
+                })
+                this.ctxImageData = ctx.getImageData(0, 0, width, width)
+            }
+            
+        }
+        downChessListener(event) {
+            if((event.target.className || '').indexOf('chess-item') !== -1 || this.locker) return
+            const [gridWdith, options] = [this.gridWdith, this.options]
+            //计算落子
+            const [x, y] = [
+                Math.round((event.offsetX-options.padding)/gridWdith), 
+                Math.round((event.offsetY-options.padding)/gridWdith)
+            ]
+            this.downChess(x, y)
+        }
+        //落子方法
+        downChess(x, y) {
+            const curRole = this.role === 1 ? 2 : 1
+            const chessId = `chess-x${x}-y${y}`
+            //没有落子
+            const chessIndBlack = this.historyInd.indexOf(chessId)
+            const chessIndWhite = this.historyInd.indexOf(chessId)
+            if(this.winner) return
+            if((chessIndBlack === -1 && chessIndWhite === -1) || chessIndBlack + 1 > this.downCnt || chessIndWhite + 1 > this.downCnt) {
+                //清除悔棋记录
+                this.history.length = this.downCnt
+                this.historyInd.length = this.downCnt
+                this.history.push({
+                    x: x,
+                    y: y,
+                    role: curRole,
+                    //画棋子
+                    el: this.drawDownChess(x, y, curRole)
+                })
+                this.historyInd.push(chessId)
+                //步数
+                this.downCnt++
+                //换角色
+                this.nextRole()
+                //判断输赢
+                this.judge(x, y, curRole)
+            }
+        }
+        //刻画旗子
+        drawDownChess(x, y, role) {
+            const [ctx, chessWdith, gridWdith, padding, width] = [ 
+                this.ctx,
+                this.chessWdith, 
+                this.gridWdith, 
+                this.options.padding,
+                this.options.width
+            ]
+            const [left, right] = [(gridWdith * x) + padding, (gridWdith * y) + padding]
+            const color = role === 1 ? 'white' : 'black'
+            if(this.isDom) {
+                let chess = document.createElement('span')
+                chess.className = `chess-item chess-x${x}-y${y}-${color} ${color}`
+                chess.style.width = chessWdith + 'px'
+                chess.style.height = chessWdith + 'px'
+                chess.style.left = left - (chessWdith * 0.5) + 'px' 
+                chess.style.top = right - (chessWdith * 0.5) + 'px'
+                this.chessmans.appendChild(chess)
+                return chess
+            } else {
+                ctx.beginPath();
+                ctx.arc(left, right, gridWdith/4, 0, 2 * Math.PI)
+                ctx.fillStyle = color
+                ctx.fill()
+                return ctx.getImageData(0, 0, width, width)
+            }
+        }
+        //判断胜负
+        judge(x, y, role) {
+            //历史记录
+            const historyInd = this.historyInd
+            //获取当前棋子权重
+            const chessWeight = this.chessWeight(x, y, role)
+            for(let item of chessWeight.valueOf()) {
+                if(item >= this.firWeight) {
+                    this.winner = role
+                    setTimeout(()=>alert(`${this.winner === 1 ? '白' : '黑'}方获胜`))
+                    break        
+                }  
+            }
+        }
+        //悔棋
+        chessBack() {
+            if(this.downCnt === 0) return
+            //清除胜方
+            this.winner = null
+            //步数减2
+            this.downCnt--
+            //角色切换
+            this.nextRole()
+            //删除落子
+            this.isDom ? this.chessmans.removeChild(this.history[this.downCnt]['el']) : this.ctx.putImageData(this.history[this.downCnt - 1]['el'], 0, 0)
+        }
+        //撤销悔棋
+        cancelChessBack() {
+            const history = this.history[this.downCnt]
+            if(history) {
+                //还原棋子
+                this.isDom ? this.chessmans.appendChild(history.el) : this.ctx.putImageData(history.el, 0, 0) 
+                //加步数
+                this.downCnt++
+                //切换角色
+                this.nextRole()
+                //判断
+                this.judge(history.x, history.y, history.role)
+            }
+        }
+        //切换角色
+        nextRole() {
+            this.role = this.role === 1 ? 2 : 1
+        }
+        //返回棋子连线ID self 返回的数据是否包含本身
+        findChess(x, y, role, cnt = 1, self = true) {
+            const rule = (() => {
+                const ruleArr = []
+                const create = (rule) => {
+                    let num = 1
+                    return () => {
+                        return eval.call(null, `(num, x, y, c) => {
+                            return 'chess-' + ${rule}
+                        }`)(num++, x, y, role)
+                    }
+                }
+                [
+                    ['`x${x-num}-y${y}`', '`x${x+num}-y${y}`'],           //x轴
+                    ['`x${x}-y${y-num}`', '`x${x}-y${y+num}`'],           //y轴
+                    ['`x${x-num}-y${y-num}`', '`x${x+num}-y${y+num}`'],   //左斜线
+                    ['`x${x-num}-y${y+num}`', '`x${x+num}-y${y-num}`']    //右斜线
+                ].forEach(item => {
+                    ruleArr.push({
+                        left: create(item[0]),
+                        right: create(item[1]),
+                        cnt: 1
+                    })
+                })
+                return ruleArr
+            })()
+
+            const result = [], chessName = `chess-x${x}-y${y}`
+            Array.from({length: cnt}).forEach(() => {
+                rule.forEach((item, index) => {
+                    !result[index] && (result[index] = self ? [chessName] : []) 
+                    result[index] = [item.left(), ...result[index], item.right()]
+                })
+            })
+            return result
+        }
+        //计算棋子权重
+        chessWeight(_x, _y, _role) {
+            const weight = this.weight
+            const [x, y, role] = [_x|0, _y|0, _role|0]
+            const [chessArr, chessWeight] = [this.findChess(x, y, role, 4), []]
+            const [downCnt, history, historyInd] = [this.downCnt, this.history, this.historyInd]
+            const curChessId = `chess-x${x}-y${y}`
+            //计算权重
+            
+            for(let [ind, item] of chessArr.entries()) {
+                for(let [subInd, subItem] of item.entries()) {
+                    const indexOf = historyInd.indexOf(subItem)
+                    if(curChessId === subItem) {
+                        item.splice(subInd, 1, 'o')
+                    } else if(indexOf === -1) {
+                        item.splice(subInd, 1, '_')
+                    } else {
+                        let chessData = history[indexOf], itemChess = chessData.role === role ? 'o' : 'x'
+                        item.splice(subInd, 1, itemChess)  
+                    }
+                }
+                //权重
+                var itemWeight = 0;
+                for(let key in weight) {
+                    let execArr = new RegExp(key).exec(item.join('')) || []
+                    if(execArr[0]) {
+                        itemWeight = weight[key] || 0
+                        break
+                    }
+                }
+                chessWeight.push(itemWeight)
+            }
+            return chessWeight
+        }
+    }
+
+    //实例化
+    const fiveGame = new Game({
+        id: '#game',
+        //棋盘大小
+        width: 600,
+        //类型 dom/canvas
+        type: 'dom',
+        //棋盘边距
+        padding: 20,
+        //棋盘颜色
+        background: 'rgb(238, 190, 110)'
+    })
+
+    //监听按钮
+    document.querySelector('#reset').addEventListener('click', fiveGame.reset)
+    document.querySelector('#chess-back').addEventListener('click', fiveGame.chessBack)
+    document.querySelector('#cancel-chess-back').addEventListener('click', fiveGame.cancelChessBack)
+
+    </script>
+</body>
+</html>

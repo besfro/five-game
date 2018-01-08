@@ -1,5 +1,12 @@
-# ES6编写的五子棋小游戏
+## ES6编写的五子棋小游戏
 
-[![license](http://img.shields.io/badge/license-BSD3-blue.svg?style=flat)](https://github.com/takedry/five-game/LICENSE)
-[![Release Version](https://img.shields.io/badge/release-1.3.0-red.svg)](https://github.com/takedry/five-game/releases)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/takedry/five-game/pulls)
+### 介绍
+ES6开发的五子棋游戏，支持DOM和CANVAS 2种模式。
+
+
+### change log
+v.0.1.0 
+* 支持dom和canvas 2种模式
+* 可定制化棋盘
+* 悔棋功能
+* 撤销悔棋
